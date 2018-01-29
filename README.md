@@ -23,6 +23,6 @@ local example1 = ft.class.Test();
 - Sandboxing,
 - Utilities such as: isclass, issubclass, issamebase, issame, isdifferent...
 
-[Documentation](./wiki)
+[Documentation](../../wiki)
 
 ** Under work **
