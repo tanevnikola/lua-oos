@@ -1,14 +1,28 @@
-# lua-oos
-Simple, fast yet powerfull OOP library for lua. 
+Fast and powerful OOP library for Lua. Generates simple classes without metatables. 
 
-Features:
-- Inheritance
-- Constructors (base to top call order)
-- Polymorphism via overloading (also allows access to base methods via super)
-- Encapsulation (private and public access)
-- Sandboxing (customizable method environment)
-- Statics through upvalues
-- Classes are simple (have no metatables)
-- Namespaces
-- Custom types
-- Utilities sych as (isclass, issubclass, issamebase, issame, isdifferent)
+The code is readable and people with OOP experience will feel at home using it.
+
+```lua
+ft.class.Test() {
+    -- capture global print
+    {print = print};
+    
+    constructor = function()
+        print("Hello World!")
+    end;
+}
+local example1 = ft.class.Test();
+```
+
+## Features:
+- Inheritance,
+- Dynamic polymorphism,
+- Encapsulation,
+- Static variables,
+- Namespaces,
+- Sandboxing,
+- Utilities such as: isclass, issubclass, issamebase, issame, isdifferent...
+
+[Documentation](./wiki)
+
+** Under work **
