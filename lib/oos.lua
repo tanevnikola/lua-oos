@@ -21,12 +21,12 @@ local function instantiateClass(inst_class_tbl, ...)
             for k, v in pairs(class_tbl[1]) do
                 if env[k] then
                     error(builderrormessage("Duplicate field name '" .. k 
-                            ..  "' found in method environment definition of class '" 
+                            ..  "' found in method environment extension of class '" 
                             .. ft.type(class_tbl) .. "'."), 0);
                 end
                 if ft.type.isboolean(v) or ft.type.isnumber(v) or ft.type.isstring(v) then
                     error(builderrormessage("Invalid type '" .. ft.type(v) 
-                            .. "' found in method environment definition of class '" 
+                            .. "' found in method environment extension of class '" 
                             .. ft.type(class_tbl) .. "'."), 0);
                 end
                 env[k] = v;
@@ -213,7 +213,7 @@ ft.type = setmetatable({
 
 ------------- exception -------------
 function ft.exception(msg, level)
-    print("[Error]  " .. debug.traceback(msg, (level or 0) + 2));
+    error("[Error]  " .. debug.traceback(msg, (level or 0) + 2));
     os.exit(-1);
 end
 
