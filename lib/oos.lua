@@ -1,4 +1,4 @@
-local ft = require "lib.utils"
+local ft = {}
 
 local function clonefunction(func, env)
     return load(string.dump(func, true), nil, "b", env);
@@ -71,8 +71,9 @@ local function instantiateClass(inst_class_tbl, ...)
 
     createmethods = function(where, class_tbl)
         for k, v in pairs(class_tbl) do
+            local funcIsUtility = (string.find(k, "_ft_") == 1)
             if not where[k] then
-                if ft.type.isfunction(v) and not ft.string.isstartswith(k, "_ft_") then
+                if ft.type.isfunction(v) and not funcIsUtility then
                     local method = createmethod(v, inst_tbl, class_tbl);
                     if k == "constructor" then
                         constructors[class_tbl] = method;
@@ -80,7 +81,7 @@ local function instantiateClass(inst_class_tbl, ...)
                         where[k] = method;
                     end
 
-                elseif ft.type.isfunction(v) and ft.string.isstartswith(k, "_ft_") then
+                elseif ft.type.isfunction(v) and funcIsUtility then
                     where[k] = v;
                 elseif not ft.type.isfunction(v) and not (ft.type.istable(v) and k == 1) then
                     error(builderrormessage("Invalid class syntax. Field named '" .. k 
@@ -170,46 +171,51 @@ setmetatable(ft.class, {
 
 
 
+------------- type -------------
+ft.type = setmetatable({
+    -- base types validation
+    isnil       = function(x) return x == nil;                  end;
+    isboolean   = function(x) return ft.type(x) == "boolean";   end;
+    isstring    = function(x) return ft.type(x) == "string";    end;
+    isnumber    = function(x) return ft.type(x) == "number";    end;
+    isfunction  = function(x) return ft.type(x) == "function";  end;
+    istable     = function(x) return ft.type(x) == "table";     end;
+    istablelike = function(x) return type(x) == "table";        end;
+    
+    isclass = function(x)
+        local _,_,c = string.find(ft.type(x), "%[(class) ft%.class[%.%a%d]+%]")
+        return c == "class"
+    end;
+    
+    -- compare types
+    issame      = function(x, y) return ft.type(x) == ft.type(y);                                               end;
+    isdifferent = function(x, y) return ft.type(x) ~= ft.type(y);                                               end;
+    issamebase  = function(x, y) return ft.type.getbasetype(x) == ft.type.getbasetype(y);                       end;
+    issubclass  = function(x, y) return ft.type.isclass(x) and x._ft_issubclassof(y) or ft.type.issame(x, y);   end;
 
-
-
-
--- extend utils
----------------------------------------------
-local original_clone = ft.table.clone;
-function ft.table.clone(tblSource)
-    local clone = original_clone(tblSource);
-    if ft.type.isclass(tblSource) then
-        clone = tblSource._ft_finishclone(clone);
+    getbasetype = function(x)
+        if ft.type.isclass(x) then
+            return x._ft_getbasetype()
+        end
+        return ft.type(x)
+    end;
+}, 
+{
+    __call = function(this, x)
+        local t = type(x)
+        -- handle custom types
+        if t == "table" and ft.type.isfunction(x._ft_gettype) then
+            t = x._ft_gettype()
+        end
+        return t
     end
-    return clone;
+});
+
+------------- exception -------------
+function ft.exception(msg, level)
+    print("[Error]  " .. debug.traceback(msg, (level or 0) + 2));
+    os.exit(-1);
 end
 
-function ft.type.isclass(x)
-    local _
-    local c
-    _,_,c = string.find(ft.type(x), "%[(class) ft%.class[%.%a%d]+%]")
-    return c == "class"
-end;
-
-function ft.type.issubclass(x, y)
-    if ft.type.isclass(x) then
-        return x._ft_issubclassof(y)
-    else
-        return ft.type.issame(x, y)
-    end
-    return false
-end;
-
-function ft.type.issamebase(x, y)
-    return ft.type.base(x) == ft.type.base(y)
-end;
-
-function ft.type.base(x)
-    if ft.type.isclass(x) then
-        return x._ft_getbasetype()
-    end
-    return ft.type(x)
-end;
 
 return ft;
