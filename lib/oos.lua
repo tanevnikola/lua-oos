@@ -1,221 +1,295 @@
 local ft = {}
 
-local function clonefunction(func, env)
-    return load(string.dump(func, true), nil, "b", env);
-end
-
-local function instantiateClass(inst_class_tbl, ...)
-    local inst_tbl = {}
-    local environments = {};
-    local constructors = {}
-    
-    
-    local function builderrormessage(msg)
-        return "Cannot make an instance of the class '" .. ft.type(inst_class_tbl) .. "'.\n[Reason] " .. msg .. "\n";
-    end
-    
-    local function extendmethodenv(env, class_tbl)
-        local _ = class_tbl._ft_base and extendmethodenv(env, class_tbl._ft_base);
-        
-        if class_tbl[1] and ft.type.istable(class_tbl[1]) then
-            for k, v in pairs(class_tbl[1]) do
-                if env[k] then
-                    error(builderrormessage("Duplicate field name '" .. k 
-                            ..  "' found in method environment extension of class '" 
-                            .. ft.type(class_tbl) .. "'."), 0);
-                end
-                if ft.type.isboolean(v) or ft.type.isnumber(v) or ft.type.isstring(v) then
-                    error(builderrormessage("Invalid type '" .. ft.type(v) 
-                            .. "' found in method environment extension of class '" 
-                            .. ft.type(class_tbl) .. "'."), 0);
-                end
-                env[k] = v;
-            end
-        end
-        return env;
-    end
-    
-    local createmethods; -- forward declaration
-    local function createmethod(func, inst_tbl, class_tbl)
-        -- method environment
-        local envKey = tostring(class_tbl);
-        local env = environments[envKey];
-        if not env then
-            env = extendmethodenv({ this = inst_tbl; }, class_tbl);
-            environments[envKey] = env;
-            -- super
-            if class_tbl._ft_base then
-                env.super = createmethods({}, class_tbl._ft_base);
-            end
-        end
-        
-        -- create the method
-        local method = clonefunction(func);
-        local i = 1;
-        local  up = debug.getupvalue(func, i);
-        while up do
-            if up == "_ENV" then
-                debug.setupvalue(method, i, env);
-            elseif env[up] then
-                error(builderrormessage("Ambiguous method environment found in '" .. ft.type(class_tbl) 
-                    ..  "': there is an upvalue with the same name '" .. up .. "'"), 0);
-            else
-                debug.upvaluejoin(method, i, func, i);
-            end
-            i = i + 1;
-            up = debug.getupvalue(func, i);
-        end;
-        
-        return method;
-    end
-
-    createmethods = function(where, class_tbl)
-        for k, v in pairs(class_tbl) do
-            local funcIsUtility = (string.find(k, "_ft_") == 1)
-            if not where[k] then
-                if ft.type.isfunction(v) and not funcIsUtility then
-                    local method = createmethod(v, inst_tbl, class_tbl);
-                    if k == "constructor" then
-                        constructors[class_tbl] = method;
-                    else
-                        where[k] = method;
-                    end
-
-                elseif ft.type.isfunction(v) and funcIsUtility then
-                    where[k] = v;
-                elseif not ft.type.isfunction(v) and not (ft.type.istable(v) and k == 1) then
-                    error(builderrormessage("Invalid class syntax. Field named '" .. k 
-                            ..  "' of type '" .. ft.type(v) .. "' not allowed in class definition."), 0);
-                end
-            end
-        end
-        return class_tbl._ft_base and createmethods(where, class_tbl._ft_base) and where or where;
-    end
-    
-    createmethods(inst_tbl, inst_class_tbl);
-    
-    -- invoke constructor
-    local function invokeconstructor(class_tbl, ...)
-        if class_tbl._ft_base then 
-            invokeconstructor(class_tbl._ft_base)
-        end
-        local _ = constructors[class_tbl] and constructors[class_tbl](...);
-    end
-    invokeconstructor(inst_class_tbl, ...);
-    return inst_tbl;
-end;
-
-local function defineClass(classpath, base, classdef)
-    local class_tbl = { };
-    for k,v in pairs(classdef) do
-        class_tbl[k] = v;
-    end
-    
-    -- static methods for each instance - dont have this and super
-    local namespace = (string.gsub(classpath, "(.*)%.%a$", "%1"));
-    local classtype = "[class " .. tostring(classpath) .. "]";
-    function class_tbl._ft_getclassname ()          return classpath; end
-    function class_tbl._ft_gettype      ()          return classtype; end
-    function class_tbl._ft_getbasetype  (class_tbl) return base and base._ft_getbasetype(base) or ft.type(class_tbl); end
-    function class_tbl._ft_issubclassof (x)         return ((ft.type(class_tbl) == ft.type(x)) or (base and base._ft_issubclassof(x))) == true; end
-    
-    -- meta
-    local class_mtbl = { _ft_base = base; __metatable = {};  __call = instantiateClass; }
-    function class_mtbl.__index(self, key)
-        return class_mtbl[key];
-    end
-    
-    return setmetatable(class_tbl, class_mtbl);
-end;
-
-ft.class = {_ft_ns = "ft.class", _ft_nspath = "ft.class"};
-
-local class_functor_mtbl = {__metatable = {}};
-
-function class_functor_mtbl.__call(self, ...)
-    if ft.type.isclass(self._ft_classdef) then
-        local status, result = pcall(self._ft_classdef, ...);
-        return status and result or ft.exception(result, 1);
-    else
-        local arg = {...};
-        
-        local base = arg[1];
-        local baseclass = ft.type.isclass(base) and ft.type.isclass(base._ft_classdef) and base._ft_classdef or ft.type.isclass(base) and base  or nil;  
-        if base and not baseclass then
-            ft.exception("invalid base class provided. Expected '[class <classname>]' got '" .. ft.type(base) .. "'", 1);
-        end
-
-        return function(classdef)
-            local status, result = pcall(defineClass, self._ft_nspath, baseclass, classdef);
-            if not status then ft.exception(result, 1) end
-
-            self._ft_classdef = result;
-            self._ft_gettype = function() return ft.type(self._ft_classdef); end;
-            return self._ft_classdef;
-        end;
-    end;
-end;
-
-function class_functor_mtbl.__index(this, key)
-    if string.sub(key, 1, string.len("_ft_"))=="_ft_" then
-        return rawget(this, key);
-    end;
-    local val = rawget(this, key) or setmetatable({_ft_ns = key, _ft_nspath = rawget(this, "_ft_nspath") .. "." .. key}, class_functor_mtbl);
-    rawset(this, key, val); 
-    return val;
-end;
-
-setmetatable(ft.class, {
-    __index = class_functor_mtbl.__index;
-});
 
 
 
-------------- type -------------
-ft.type = setmetatable({
+----------------------------------------------------------
+-- type
+----------------------------------------------------------
+local ft_type;
+ft_type = setmetatable({
     -- base types validation
-    isnil       = function(x) return x == nil;                  end;
-    isboolean   = function(x) return ft.type(x) == "boolean";   end;
-    isstring    = function(x) return ft.type(x) == "string";    end;
-    isnumber    = function(x) return ft.type(x) == "number";    end;
-    isfunction  = function(x) return ft.type(x) == "function";  end;
-    istable     = function(x) return ft.type(x) == "table";     end;
-    istablelike = function(x) return type(x) == "table";        end;
+    isnil       = function(x) return x == nil;                                                                  end;
+    isboolean   = function(x) return ft_type(x) == "boolean";                                                   end;
+    isstring    = function(x) return ft_type(x) == "string";                                                    end;
+    isnumber    = function(x) return ft_type(x) == "number";                                                    end;
+    isfunction  = function(x) return ft_type(x) == "function";                                                  end;
+    istable     = function(x) return ft_type(x) == "table";                                                     end;
+    istablelike = function(x) return type(x) == "table";                                                        end;
     
-    isclass = function(x)
-        local _,_,c = string.find(ft.type(x), "%[(class) ft%.class[%.%a%d]+%]")
-        return c == "class"
-    end;
+    isclass     = function(x) return type(x) == "table" and ft_type.isfunction(x._ft_gettype)                   end;
     
     -- compare types
-    issame      = function(x, y) return ft.type(x) == ft.type(y);                                               end;
-    isdifferent = function(x, y) return ft.type(x) ~= ft.type(y);                                               end;
-    issamebase  = function(x, y) return ft.type.getbasetype(x) == ft.type.getbasetype(y);                       end;
-    issubclass  = function(x, y) return ft.type.isclass(x) and x._ft_issubclassof(y) or ft.type.issame(x, y);   end;
+    issame      = function(x, y) return ft_type(x) == ft_type(y);                                               end;
+    isdifferent = function(x, y) return ft_type(x) ~= ft_type(y);                                               end;
+    issamebase  = function(x, y) return ft_type.getbasetype(x) == ft_type.getbasetype(y);                       end;
+    issubclass  = function(x, y) return ft_type.isclass(x) and x._ft_issubclassof(y) or ft_type.issame(x, y);   end;
 
-    getbasetype = function(x)
-        if ft.type.isclass(x) then
-            return x._ft_getbasetype()
-        end
-        return ft.type(x)
-    end;
+    getbasetype = function(x) return ft_type.isclass(x) and x._ft_getbasetype() or ft_type(x)                   end;
 }, 
 {
     __call = function(this, x)
         local t = type(x)
         -- handle custom types
-        if t == "table" and ft.type.isfunction(x._ft_gettype) then
+        if t == "table" and ft_type.isfunction(x._ft_gettype) then
             t = x._ft_gettype()
         end
         return t
     end
 });
 
-------------- exception -------------
-function ft.exception(msg, level)
-    error("[Error]  " .. debug.traceback(msg, (level or 0) + 2));
+----------------------------------------------------------
+-- error
+----------------------------------------------------------
+function ft_error(msg, level)
+    error("\n\n[Error]\n" .. debug.traceback(msg, (level or 0) + 2));
     os.exit(-1);
 end
 
+local function instantiationError(msg, t)
+    error("Cannot make instance of '" .. t .. "'\n[Reason]\n" .. msg .. "\n");
+end
+
+----------------------------------------------------------
+-- reflection
+----------------------------------------------------------
+local annotationRegistry = setmetatable({}, {__mode = "kv"});
+local function annotate(o, md) 
+    annotationRegistry[o] = md;
+    return o; 
+end
+
+local function getAnnotation(o) 
+    return annotationRegistry[o]; 
+end
+
+local ft_reflection = {};
+
+function ft_reflection.getInfo(o)
+    return getAnnotation(o);
+end
+
+----------------------------------------------------------
+-- oos
+----------------------------------------------------------
+
+-- env    : the environment to extend
+-- c      : class definition
+local function extendEnv(env, c)
+    env = c._ft_base and extendEnv(env, c._ft_base) or env;
+    
+    local mex = c[1];
+    
+    if ft_type.istable(mex) then
+        for k, v in pairs(mex) do
+            if env[k] then
+                instantiationError("Duplicate field '" .. k ..  "' found in MEX", ft_type(c));
+            end
+            if ft_type.isboolean(v) or ft_type.isnumber(v) or ft_type.isstring(v) then
+                instantiationError("Invalid type '" .. ft_type(v) .. "' found in MEX", ft_type(c));
+            end
+            env[k] = v;
+        end
+    end
+    return env;
+end
+
+-- n      : the method name
+-- f      : the function to create method from
+-- c      : class definition
+-- icctx  : class instance creation context
+local function loadMethodFunction(n, f, c, icctx)
+    local env = icctx.env.public[c];
+    
+    -- create the method
+    local method = load(string.dump(f, true), nil, "b", nil);
+    local i = 1;
+    local  up = debug.getupvalue(f, i);
+    while up do
+        if up == "_ENV" then
+            debug.setupvalue(method, i, env);
+        elseif env[up] then
+            instantiationError("Ambiguous field '" .. up .. "' found in MEX, there is an upvalue with the same name", ft_type(c));
+        else
+            debug.upvaluejoin(method, i, f, i);
+        end
+        i = i + 1;
+        up = debug.getupvalue(f, i);
+    end;
+    
+    if n == "constructor" then
+        icctx.constructors[c] = method;
+        method = nil;
+    end
+
+    return method;
+end
+
+local createMethods; -- forward declaration
+
+-- n      : the method name
+-- f      : the function to create method from
+-- c      : class definition
+-- icctx  : class instance creation context
+local function createMethod(n, f, c, icctx)
+    if not icctx.env.public[c] then
+        icctx.env.public[c] = setmetatable(extendEnv({ this = icctx.instance }, c), {
+            __newindex = function(_, k, v) 
+              icctx.env.private[k] = v;
+            end;
+            
+            __index = function(_, k, v) 
+              return rawget(icctx.env.public[c], k) or icctx.env.private[k]
+            end;
+        });
+        -- super
+        if c._ft_base then
+          rawset(icctx.env.public[c], "super", createMethods({}, c._ft_base, icctx));
+        end
+    end
+    
+    local methodFunction = loadMethodFunction(n, f, c, icctx);
+    
+    if methodFunction then
+        local methodMetadata = {
+            getClass        = function() return c; end;
+            getSimpleName   = function() return n; end;
+            getName         = function() return c._ft_gettype() .. ":" .. n; end;
+        };
+        return setmetatable(methodMetadata, { __call = function(_, ...) return methodFunction(...); end });
+    end
+    
+    return nil;
+end
+
+-- h      : host, the table that will host the methods
+-- c      : class definition
+-- icctx  : class instance creation context
+createMethods = function(h, c, icctx)
+    for k, v in pairs(c) do
+        local funcIsUtility = (string.find(k, "_ft_") == 1)
+        if not h[k] then
+            if ft_type.isfunction(v) and not funcIsUtility then
+                h[k] = createMethod(k, v, c, icctx);
+            elseif ft_type.isfunction(v) and funcIsUtility then
+                h[k] = v;
+            elseif not ft_type.isfunction(v) and not (ft_type.istable(v) and k == 1) then
+                instantiationError("Invalid field '" .. k .. "' (of type '" .. ft_type(v) .. "') found in class definition", ft_type(c));
+            end
+        end
+    end
+    return (c._ft_base and createMethods(h, c._ft_base, icctx) or true) and h;
+end
+
+local function createInstance(c, ...)
+    -- the instance creation context
+    local icctx = {
+      instance      = {},
+      constructors  = setmetatable({}, {__mode = "kv"}),
+      env           = {
+          private = setmetatable({}, {__mode = "kv"}),
+          public = setmetatable({}, {__mode = "kv"})
+      },
+    }
+    
+    createMethods(icctx.instance, c, icctx);
+    
+    -- invoke constructor
+    local function invokeconstructor(c, ...)
+        if c._ft_base then 
+            invokeconstructor(c._ft_base, ...)
+        end
+        local _ = icctx.constructors[c] and icctx.constructors[c](...);
+    end
+    invokeconstructor(c, ...);
+    
+    -- protect the instance
+    local pInstance = setmetatable(icctx.instance, {
+        __metatable = {};
+        __index = function(self, k)
+          return rawget(self, k) or error("No field named '" .. ft_type(icctx.instance) .. ":" .. k .. "'");
+        end;
+        __newindex = function(self, k, v) 
+          error("Cannot set value for field '" .. ft_type(icctx.instance) .. ":" .. k .. "'");
+        end;
+        
+        __call = function(self, ...)
+          if ft_type.isfunction(self.__call) then return self.__call(...) end
+        end;
+    });
+    
+    return pInstance;
+end;
+
+local function defineClass(classpath, base, c)
+    -- static methods for each instance - dont have this and super
+    function c._ft_gettype      ()          return tostring(classpath);                                                         end
+    function c._ft_getbasetype  ()          return base and base._ft_getbasetype() or ft_type(c);                               end
+    function c._ft_issubclassof (x)         return ((ft_type(c) == ft_type(x)) or (base and base._ft_issubclassof(x))) == true; end
+    
+    -- meta
+    local class_mtbl;
+    class_mtbl = { _ft_base = base; __metatable = {};  __call = createInstance; __index = function(_, key) return class_mtbl[key]; end}
+    
+    return setmetatable(c, class_mtbl);
+end;
+
+local ft_class = {_ft_ns = "ft.class"};
+
+local class_functor_mtbl
+class_functor_mtbl = {
+  __metatable = {},
+  __call = function(self, ...) 
+    if ft_type.isclass(self._ft_classdef) then
+      local status, result = pcall(self._ft_classdef, ...);
+      return status and result or ft_error(result, 1);
+    else
+      local arg = {...};
+      local base = arg[1];
+      local baseclass = ft_type.isclass(base) and ft_type.isclass(base._ft_classdef) and base._ft_classdef or ft_type.isclass(base) and base  or nil;  
+      if base and not baseclass then
+        ft_error("invalid base class provided. Expected 'class <classname>' got '" .. ft_type(base) .. "'", 1);
+      end
+      
+      return function(classdef)
+        local status, result = pcall(defineClass, self._ft_ns, baseclass, classdef);
+
+        if not status then ft_error(result, 1) end
+        self._ft_classdef = result;
+        --self._ft_gettype = function() return ft_type(self._ft_classdef); end;
+
+        annotate(self._ft_classdef, {
+            getClass          = function() return self._ft_classdef;        end;
+            getName           = function() return self._ft_ns;              end;
+            getBaseClassInfo  = function() return getAnnotation(baseclass); end;
+        });
+
+        return self._ft_classdef;
+      end;
+    end;
+  end;
+  
+  __index = function(self, key)
+      if rawget(self, "nsRecord") == nil then
+          self.nsRecord = {};
+      end
+      
+      if string.sub(key, 1, string.len("_ft_"))=="_ft_" then
+          return rawget(self, key);
+      end;
+      self.nsRecord[key] = self.nsRecord[key] or setmetatable({_ft_ns = rawget(self, "_ft_ns") .. "." .. key}, class_functor_mtbl);
+      return self.nsRecord[key]._ft_classdef or self.nsRecord[key];
+  end;
+};
+
+
+setmetatable(ft_class, {
+    __index = class_functor_mtbl.__index;
+});
+
+
+ft.type = ft_type;
+ft.class = ft_class;
+ft.reflection = ft_reflection;
 
 return ft;
