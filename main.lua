@@ -1,25 +1,10 @@
 local ft = require "lib/oos"
+require "lib/ann"
 
-ft.class.reflection.Provider() {
-  { print = print; };
-  
-  testBase = function()
-    print("auuu"); 
-  end;
+ft.class.A() {
+
+    { print = print; tostring = tostring; };
+
 }
 
-ft.class.reflection.Listener(ft.class.reflection.Provider) {
-  constructor = function() 
-    print("hello"); 
-  end;
-  testExtended = function()
-    print("auuu"); 
-  end
-  
-}
-
-local info = ft.reflection.getInfo(ft.class.reflection.Listener);
-print(info.getName());
-print(info.getClass());
-print(ft.type(info.getClass()));
-print(info.getBaseClassInfo().getName());
+print(ft.reflection.getInfo(ft.class.A).getName())

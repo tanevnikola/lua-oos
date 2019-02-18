@@ -37,28 +37,12 @@ local function testInvalidTypeInMex()
 end
 testInvalidTypeInMex();
 
-local function testDuplicateFieldInMEX()
-    local testFunc = inScope(function(ft)
-        ft.class.A() {
-          { x = {} };
-        }
-        ft.class.B(ft.class.A) {
-          { x = {} };
-          constructor = function() f(x) end
-        }
-        ft.class.B();
-    end)
-    
-    assertErrorMessage("Duplicate field 'x' found in MEX", testFunc);
-end
-testDuplicateFieldInMEX();
-
 local function testAmbiguousFieldInMEX()
     local function buildTest()
       return inScope(function(ft) 
-        local x = 5;
+        local x = tostring;
         ft.class.A() {
-          { x = {} };
+          { x = print };
           constructor = function() f(x) end
         }
         ft.class.A();
