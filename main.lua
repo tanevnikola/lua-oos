@@ -1,15 +1,17 @@
-local ft = require "lib.ann"(require "lib/oos")
-local class = ft.class;
-local markAs = {
-    Service = class.AnnExample(class.annotation.Annotation) {};
-}
+local oos   = require "lib.oos"
+local ann   = require "lib.ann"
+local luna  = require "lib.luna"
 
+local ns = oos.class;
 
-markAs.Service({
-    a = "this is a service"
-})(class.A() {
+local classA = ann.annotate(
+    luna.stereotype["@Component"]
+)(
+ns.A(){
 
 });
 
-local md = class.annotation.get(class.A, class.AnnExample);
-print(md.a);
+
+local annotated = ann.getAnnotated(luna.stereotype["@Component"])
+print(oos.type(annotated[1]));
+print(oos.type(classA))

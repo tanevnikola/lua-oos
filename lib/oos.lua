@@ -1,4 +1,16 @@
-local ft = {}
+----------------------------------------------------------
+-- utils
+----------------------------------------------------------
+local ft_utils = {};
+
+local random = math.random
+function ft_utils.uuid()
+    local template ='xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
+    return string.gsub(template, '[xy]', function (c)
+        local v = (c == 'x') and random(0, 0xf) or random(8, 0xb)
+        return string.format('%x', v)
+    end)
+end
 
 ----------------------------------------------------------
 -- reflection
@@ -15,8 +27,8 @@ end
 
 local ft_reflection = {
     stereotype = {
-        CLASS   = "ft.stereotype.CLASS",
-        METHOD  = "ft.stereotype.METHOD",
+        CLASS   = "CLASS",
+        METHOD  = "METHOD",
     }
 };
 
@@ -237,7 +249,7 @@ local function defineClass(classpath, base, c)
     return setmetatable(c, class_mtbl);
 end;
 
-local ft_class = {_ft_ns = "ft.class", _ft_ns_simple = "ft.class"};
+local ft_class = {_ft_ns = "ns", _ft_ns_simple = "ns"};
 
 local class_functor_mtbl
 class_functor_mtbl = {
@@ -297,10 +309,10 @@ setmetatable(ft_class, {
     __index = class_functor_mtbl.__index;
 });
 
-
-ft.type = ft_type;
-ft.class = ft_class;
-ft.reflection = ft_reflection;
-ft.error = ft_error
-
-return ft;
+return {
+    type            = ft_type;
+    class           = ft_class;
+    reflection      = ft_reflection;
+    error           = ft_error;
+    utils           = ft_utils;
+};
