@@ -1,25 +1,17 @@
 return function(ft)
+        local registry = setmetatable({}, {__mode = "k"});
+        ft.class.annotation.Annotation() {
+            constructor = function(md)
+                function annotate(o)
+                    registry[o] = md;
+                    return o;
+                end
+            end;
 
-  ft.class.annotation.Annotation() {
-    { registry = setmetatable({}, {__mode = "kv"}); };
-    
-    constructor = function(md)
-      function annotate(o) 
-        registry[o] = md;
-        return o; 
-      end
-    end;
-    
-    __call = function(o) 
-      return annotate(o); 
-    end
-  }
-  
-  ft.class.annotation.Annotation.Utils(ft.class.annotation.Annotation) {
-    getAnnotation = function(o) 
-      return registry[o]; 
-    end
-  }
-  
-  return ft;
+            __call = function(o)
+                return annotate(o);
+            end
+        }
+
+        return ft;
 end
