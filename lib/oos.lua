@@ -156,7 +156,7 @@ local function createMethod(f, c, icctx)
             end;
 
             __index = function(_, k, v)
-                return rawget(icctx.env.internal[c], k) or icctx.env.private[k]
+                return icctx.env.private[k]
             end;
         });
         -- super

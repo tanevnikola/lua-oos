@@ -42,7 +42,7 @@ return function(oos, ns, stereotype, ann, Graph)
                 for _, dep in ipairs(deps) do
                     local b = oos.type.isclass(dep) and dep or oos.type.isfunction(dep) and dep() or nil;
                     if b then
-                        table.insert(args, registry[b] or oos.error("baaad " .. oos.type(b)));
+                        table.insert(args, registry[b] or oos.error("Cannot create component '" .. oos.type(v.c) ..  "', missing dependency '" .. oos.type(b) .. "'"));
                     end
                 end
                 registry[v.c] = v.c(table.unpack(args));

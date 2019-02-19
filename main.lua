@@ -16,7 +16,7 @@ ann.annotate(
     end;
     
      foo = function()
-        print("dasdsads _B")
+        print("foo _B")
     end;
 });
 
@@ -33,7 +33,7 @@ ann.annotate(
     end;
     
     foo = function()
-        print("dasdsads B")
+        print("foo B")
     end;
 
 });
@@ -51,7 +51,58 @@ ann.annotate(
     end;
     
     foo = function()
-        print("DASDSA")
+        print("foo A")
+    end;
+});
+
+ann.annotate(
+    luna.stereotype["@Component"] {
+        ns._B
+    }
+)(ns.A1() {
+    { print = print };
+    
+    constructor = function(_b)
+        _b.foo();
+        print("A1")
+    end;
+    
+    foo = function()
+        print("foo A1")
+    end;
+});
+
+ann.annotate(
+    luna.stereotype["@Component"] {
+        ns.A1
+    }
+)(ns.A2() {
+    { print = print };
+    
+    constructor = function(_b)
+        _b.foo();
+        print("A2")
+    end;
+    
+    foo = function()
+        print("foo A2")
+    end;
+});
+
+ann.annotate(
+    luna.stereotype["@Component"] {
+        ns.A2
+    }
+)(ns.A3() {
+    { print = print };
+    
+    constructor = function(_b)
+        _b.foo();
+        print("A3")
+    end;
+    
+    foo = function()
+        print("foo A3")
     end;
 });
 
