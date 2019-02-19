@@ -21,7 +21,7 @@ local ft_reflection = {
 };
 
 function ft_reflection.getInfo(o)
-    return setmetatable({}, {__index = function(_, x) return getAnnotation(o)[x]; end;});
+    return getAnnotation(o);
 end
 
 ----------------------------------------------------------
@@ -40,18 +40,18 @@ ft_type = setmetatable({
 
     ismethod    = function(x)
         local ann = getAnnotation(x);
-        return ann and (ann.getStereotype() == ft_reflection.stereotype.METHOD) or false;
+        return ann and (ann.stereotype == ft_reflection.stereotype.METHOD) or false;
     end;
 
     isclass     = function(x)
         local ann = getAnnotation(x);
-        return ann and (ann.getStereotype() == ft_reflection.stereotype.CLASS) or false;
+        return ann and (ann.stereotype == ft_reflection.stereotype.CLASS) or false;
     end;
 
     issubclass  = function(x, y)
         local ann = getAnnotation(x);
-        local baseX = ann and ann.getBaseClassInfo()
-        return ft_type.issame(x, y) or baseX and ft_type.issubclass(baseX.getClass(), y) or false;
+        local baseX = ann and ann.baseClass
+        return ft_type.issame(x, y) or baseX and ft_type.issubclass(baseX.object, y) or false;
     end;
 
     -- compare types
@@ -61,18 +61,19 @@ ft_type = setmetatable({
 
     getbasetype = function(x)
         local ann = getAnnotation(x);
-        return ann and ann.getBaseClassInfo() and ann.getBaseClassInfo().getName() or ft_type(x);
+        return ann and ann.baseClass and ann.baseClass.name or ft_type(x);
     end;
 },
 {
-    __call = function(this, x)
+    __call = function(_, x)
         local ann = getAnnotation(x);
         return
             ann
             and
-            (((ann.getStereotype() == ft_reflection.stereotype.CLASS) and ann.getName())
+            (   (ann.stereotype == ft_reflection.stereotype.CLASS) and ann.name
             or
-            (ann.getStereotype() == ft_reflection.stereotype.METHOD) and "method")
+            (ann.stereotype == ft_reflection.stereotype.METHOD) and "method"
+            )
             or type(x)
     end
 });
@@ -96,6 +97,7 @@ end
 -- env    : the environment to extend
 -- c      : class definition
 local function extendEnv(env, c)
+    env = c._ft_base and extendEnv(env, c._ft_base) or env;
     local mex = c[1];
 
     if ft_type.istable(mex) then
@@ -112,11 +114,10 @@ local function extendEnv(env, c)
     return env;
 end
 
--- n      : the method name
 -- f      : the function to create method from
 -- c      : class definition
 -- icctx  : class instance creation context
-local function loadMethodFunction(n, f, c, icctx)
+local function loadMethodFunction(f, c, icctx)
     local env = icctx.env.internal[c];
 
     -- create the method
@@ -135,23 +136,15 @@ local function loadMethodFunction(n, f, c, icctx)
         up = debug.getupvalue(f, i);
     end;
 
-    if n == "constructor" then
-        icctx.constructors[c] = method;
-        method = nil;
-    else
-        annotate(method, getAnnotation(f))
-    end
-
     return method;
 end
 
 local createMethods; -- forward declaration
 
--- n      : the method name
 -- f      : the function to create method from
 -- c      : class definition
 -- icctx  : class instance creation context
-local function createMethod(n, f, c, icctx)
+local function createMethod(f, c, icctx)
     if not icctx.env.internal[c] then
         icctx.env.internal[c] = setmetatable(extendEnv({ this = icctx.instance }, c), {
             __newindex = function(_, k, v)
@@ -168,7 +161,7 @@ local function createMethod(n, f, c, icctx)
         end
     end
 
-    return loadMethodFunction(n, f, c, icctx);
+    return loadMethodFunction(f, c, icctx);
 end
 
 -- h      : host, the table that will host the methods
@@ -176,9 +169,9 @@ end
 -- icctx  : class instance creation context
 createMethods = function(h, c, icctx)
     for k, v in pairs(c) do
-        if not h[k] then
+        if k ~= "constructor" and not h[k] then
             if ft_type.ismethod(v) then
-                h[k] = createMethod(k, v, c, icctx);
+                h[k] = annotate(createMethod(v, c, icctx), getAnnotation(v));
             elseif ft_type.isfunction(v) then
                 h[k] = v;
             elseif not ft_type.isfunction(v) and not (ft_type.istable(v) and k == 1) then
@@ -186,17 +179,17 @@ createMethods = function(h, c, icctx)
             end
         end
     end
-    return h;
+    return c._ft_base and createMethods(h, c._ft_base, icctx) or h;
 end
 
 local function createInstance(c, ...)
     -- the instance creation context
     local icctx = {
-        instance      = {},
-        constructors  = setmetatable({}, {__mode = "kv"}),
-        env           = {
-            private   = setmetatable({}, {__mode = "kv"}),
-            internal  = setmetatable({}, {__mode = "kv"})
+        instance        = annotate({}, getAnnotation(c)),
+        constructors    = {},
+        env             = {
+            private     = {},
+            internal    = {}
         },
     }
 
@@ -207,7 +200,7 @@ local function createInstance(c, ...)
         if c._ft_base then
             invokeconstructor(c._ft_base, ...)
         end
-        local _ = icctx.constructors[c] and icctx.constructors[c](...);
+        local _ = c.constructor and createMethod(c.constructor, c, icctx)(...);
     end
     invokeconstructor(c, ...);
 
@@ -222,32 +215,24 @@ local function createInstance(c, ...)
         end;
 
         __call = function(self, ...)
-            if ft_type.isfunction(self.__call) then return self.__call(...) end
+            if ft_type.ismethod(self.__call) then 
+                return self.__call(...) 
+            end
         end;
     });
 
-    return annotate(pInstance, getAnnotation(c));
+    return pInstance;
 end;
 
-local function defineClass(classpath, base, cl)
-
-    local c = {};
-    local function copyMembers(class)
-        local ann = getAnnotation(class)
-        local base = ann and ann.getBaseClassInfo() and ann.getBaseClassInfo().getClass()
-        if base then copyMembers(base) end
-
-        for k, v in pairs(class) do
-            c[k] = v;
-        end
-        return c;
-    end
-
-    c = base and copyMembers(base) and copyMembers(cl) or copyMembers(cl);
-
-    -- meta
+local function defineClass(classpath, base, c)
     local class_mtbl;
-    class_mtbl = { _ft_base = base; __metatable = {}; __call = createInstance; __newindex = function() ft_error("Cannot extend classes"); end; __index = function(_, key) return class_mtbl[key]; end}
+    class_mtbl = {
+        _ft_base = base;
+        __metatable = {};
+        __call = createInstance;
+        __newindex = function() ft_error("Cannot extend classes"); end;
+        __index = function(_, key) return class_mtbl[key]; end
+    }
 
     return setmetatable(c, class_mtbl);
 end;
@@ -260,32 +245,37 @@ class_functor_mtbl = {
     __call = function(self, ...)
         local arg = {...};
         local base = arg[1];
-        local baseclass = ft_type.isclass(base) and ft_type.isclass(base._ft_classdef) and base._ft_classdef or ft_type.isclass(base) and base  or nil;
+        local baseclass = ft_type.isclass(base) and base or nil;
         if base and not baseclass then
             ft_error("invalid base class provided. Expected 'class <classname>' got '" .. ft_type(base) .. "'", 1);
         end
 
         return function(classdef)
+            local methodAnnotations = {}
             self._ft_classdef = annotate(defineClass(self._ft_ns, baseclass, classdef), {
-                getStereotype     = function() return ft_reflection.stereotype.CLASS;           end;
-                getName           = function() return self._ft_ns;                              end;
-                getSimpleName     = function() return self._ft_ns_simple;                       end;
+                createInstance      = function(...) return self._ft_classdef(...); end;
 
-                getClass          = function() return self._ft_classdef;                        end;
-
-                getBaseClassInfo  = function() return baseclass and getAnnotation(baseclass);   end;
+                stereotype          = ft_reflection.stereotype.CLASS;
+                name                = self._ft_ns;
+                simpleName          = self._ft_ns_simple;
+                baseClass           = baseclass and getAnnotation(baseclass) or nil;
+                methods             = methodAnnotations;
             });
-            for k, v in pairs(self._ft_classdef) do
-                if ft_type.isfunction(v) then
-                    annotate(v, {
-                        getStereotype     = function() return ft_reflection.stereotype.METHOD;  end;
-                        getName           = function() return self._ft_ns .. ":" .. k;          end;
-                        getSimpleName     = function() return k;                                end;
 
-                        getClassInfo      = function() return getAnnotation(self._ft_classdef); end;
+            for k, v in pairs(self._ft_classdef) do
+                if ft_type.isfunction(v) and k ~= "constructor" then
+                    annotate(v, {
+                        stereotype          = ft_reflection.stereotype.METHOD;
+                        name                = self._ft_ns .. "." .. k;
+                        simpleName          = k;
+                        class               = getAnnotation(self._ft_classdef);
                     });
+
+                    methodAnnotations[k] = getAnnotation(v);
                 end
             end
+            
+            return self._ft_classdef;
         end;
     end;
 

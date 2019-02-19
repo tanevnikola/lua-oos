@@ -1,9 +1,15 @@
-local ft = require "lib/oos"
-require "lib/ann"
-
-ft.class.A() {
-    { print = print; tostring = tostring; };
-
+local ft = require "lib.ann"(require "lib/oos")
+local class = ft.class;
+local markAs = {
+    Service = class.AnnExample(class.annotation.Annotation) {};
 }
 
-print(ft.reflection.getInfo(ft.class.A).getName())
+
+markAs.Service({
+    a = "this is a service"
+})(class.A() {
+
+});
+
+local md = class.annotation.get(class.A, class.AnnExample);
+print(md.a);
