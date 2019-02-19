@@ -1,6 +1,6 @@
 local oos = require "lib.oos"
 
-local ns = oos.class.ann[oos.utils.uuid()];
+local ns = oos.class.ann;
 
 local registry = setmetatable({}, {__mode = "k"});
 
@@ -10,7 +10,7 @@ ns.Annotation() {
     constructor = function(md)
         annotate = function(o)
             registry[o] = registry[o] or {};
-            registry[o][oos.type(this)] = md;
+            registry[o][oos.type(this)] = md or {};
             return o;
         end
     end;
@@ -20,12 +20,12 @@ ns.Annotation() {
     end
 }
 
-local function getAnnotations(o, ann)
+local function getMetadata(o, ann)
     ann = oos.type(ann);
     return registry[o] and registry[o][ann] or {};
 end
 
-local function getAllAnnotations(o)
+local function getAnnotations(o)
     return registry[o] or {};
 end
 
@@ -50,8 +50,8 @@ end
 return {
     annotate            = annotate;
 
+    getMetadata         = getMetadata;
     getAnnotations      = getAnnotations;
-    getAllAnnotations   = getAllAnnotations;
     getAnnotated        = getAnnotated;
     
     Annotation          = ns.Annotation;

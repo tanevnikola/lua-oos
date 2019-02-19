@@ -1,15 +1,13 @@
 ----------------------------------------------------------
--- utils
+-- error
 ----------------------------------------------------------
-local ft_utils = {};
+local function ft_error(msg, level)
+    error(debug.traceback("\n[Error]\n" .. msg, (level or 0) + 2));
+    os.exit(-1);
+end
 
-local random = math.random
-function ft_utils.uuid()
-    local template ='xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
-    return string.gsub(template, '[xy]', function (c)
-        local v = (c == 'x') and random(0, 0xf) or random(8, 0xb)
-        return string.format('%x', v)
-    end)
+local function instantiationError(msg, t)
+    ft_error("Cannot make instance of '" .. t .. "'\n[Reason]\n" .. msg, 1);
 end
 
 ----------------------------------------------------------
@@ -17,11 +15,17 @@ end
 ----------------------------------------------------------
 local annotationRegistry = setmetatable({}, {__mode = "k"});
 local function annotate(o, md)
+    if not o then
+        ft_error("annotate nil")
+    end
     annotationRegistry[o] = md;
     return o;
 end
 
 local function getAnnotation(o)
+    if not o then
+        ft_error("get annotate nil")
+    end
     return annotationRegistry[o];
 end
 
@@ -91,18 +95,6 @@ ft_type = setmetatable({
 });
 
 ----------------------------------------------------------
--- error
-----------------------------------------------------------
-local function ft_error(msg, level)
-    error(debug.traceback("\n[Error]\n" .. msg, (level or 0) + 2));
-    os.exit(-1);
-end
-
-local function instantiationError(msg, t)
-    ft_error("Cannot make instance of '" .. t .. "'\n[Reason]\n" .. msg, 1);
-end
-
-----------------------------------------------------------
 -- oos
 ----------------------------------------------------------
 
@@ -117,7 +109,7 @@ local function extendEnv(env, c)
             if env[k] then
                 instantiationError("Duplicate field '" .. k ..  "' found in MEX", ft_type(c));
             end
-            if not ft_type.isfunction(v) then
+            if not (ft_type.isfunction(v) or ft_type.istablelike(v) or ft_type.isfunction(v)) then
                 instantiationError("Invalid type '" .. ft_type(v) .. "' found in MEX", ft_type(c));
             end
             env[k] = v;
@@ -183,7 +175,8 @@ createMethods = function(h, c, icctx)
     for k, v in pairs(c) do
         if k ~= "constructor" and not h[k] then
             if ft_type.ismethod(v) then
-                h[k] = annotate(createMethod(v, c, icctx), getAnnotation(v));
+                h[k] = createMethod(v, c, icctx);
+                h[k] = h[k] and annotate(h[k], getAnnotation(v));
             elseif ft_type.isfunction(v) then
                 h[k] = v;
             elseif not ft_type.isfunction(v) and not (ft_type.istable(v) and k == 1) then
@@ -219,6 +212,7 @@ local function createInstance(c, ...)
     -- protect the instance
     local pInstance = setmetatable(icctx.instance, {
         __metatable = {};
+        
         __index = function(self, k)
             return rawget(self, k) or error("No field named '" .. ft_type(icctx.instance) .. ":" .. k .. "'");
         end;
@@ -254,23 +248,20 @@ local ft_class = {_ft_ns = "ns", _ft_ns_simple = "ns"};
 local class_functor_mtbl
 class_functor_mtbl = {
     __metatable = {},
-    __call = function(self, ...)
-        local arg = {...};
-        local base = arg[1];
-        local baseclass = ft_type.isclass(base) and base or nil;
-        if base and not baseclass then
+    __call = function(self, base)
+        if base and not ft_type.isclass(base) then
             ft_error("invalid base class provided. Expected 'class <classname>' got '" .. ft_type(base) .. "'", 1);
         end
 
         return function(classdef)
             local methodAnnotations = {}
-            self._ft_classdef = annotate(defineClass(self._ft_ns, baseclass, classdef), {
+            self._ft_classdef = annotate(defineClass(self._ft_ns, base, classdef), {
                 createInstance      = function(...) return self._ft_classdef(...); end;
 
                 stereotype          = ft_reflection.stereotype.CLASS;
                 name                = self._ft_ns;
                 simpleName          = self._ft_ns_simple;
-                baseClass           = baseclass and getAnnotation(baseclass) or nil;
+                baseClass           = base and getAnnotation(base) or nil;
                 methods             = methodAnnotations;
             });
 
@@ -292,13 +283,12 @@ class_functor_mtbl = {
     end;
 
     __index = function(self, key)
-        if rawget(self, "classRecord") == nil then
-            self.classRecord = {};
-        end
+        self.classRecord = rawget(self, "classRecord") or {};
 
-        if string.sub(key, 1, string.len("_ft_"))=="_ft_" then
+        if string.sub(key, 1, string.len("_ft_")) =="_ft_" then
             return rawget(self, key);
         end;
+        
         self.classRecord[key] = self.classRecord[key] or setmetatable({_ft_ns = rawget(self, "_ft_ns") .. "." .. key, _ft_ns_simple = key}, class_functor_mtbl);
         return self.classRecord[key]._ft_classdef or self.classRecord[key];
     end;
@@ -314,5 +304,4 @@ return {
     class           = ft_class;
     reflection      = ft_reflection;
     error           = ft_error;
-    utils           = ft_utils;
 };

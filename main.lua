@@ -1,17 +1,59 @@
-local oos   = require "lib.oos"
-local ann   = require "lib.ann"
-local luna  = require "lib.luna"
+local oos       = require "lib.oos"
+local ann       = require "lib.ann"
+local luna      = require "lib.luna.luna"
+local Graph     = require "lib.graph.graph"
 
 local ns = oos.class;
 
-local classA = ann.annotate(
-    luna.stereotype["@Component"]
-)(
-ns.A(){
+ann.annotate(
+    luna.stereotype["@Component"]{
+    }
+)(ns._B(){
+    {print = print};
+    
+    constructor = function()
+        print("_B")
+    end;
+    
+     foo = function()
+        print("dasdsads _B")
+    end;
+});
+
+ann.annotate(
+    luna.stereotype["@Component"]{
+        function() return ns.A end;
+    }
+)(ns.B(){
+    {print = print};
+    
+    constructor = function(a)
+        a.foo();
+        print("B")
+    end;
+    
+    foo = function()
+        print("dasdsads B")
+    end;
 
 });
 
+ann.annotate(
+    luna.stereotype["@Component"] {
+        ns._B
+    }
+)(ns.A() {
+    { print = print };
+    
+    constructor = function(_b)
+        _b.foo();
+        print("A")
+    end;
+    
+    foo = function()
+        print("DASDSA")
+    end;
+});
 
-local annotated = ann.getAnnotated(luna.stereotype["@Component"])
-print(oos.type(annotated[1]));
-print(oos.type(classA))
+
+luna.ctx.Loader().load();
