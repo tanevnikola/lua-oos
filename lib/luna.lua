@@ -54,36 +54,40 @@ ns.ctx.Loader() {
         function getDependencies(c)
             return ann.getMetadata(c, stereotype["@Component"]);
         end
-    end;
+        
+        function forEachDependency(f)
+            for _, dep in ipairs(ann.getMetadata(c, stereotype["@Component"])) do
+                if not (oos.type.isclass(dep) or oos.type.isobject(dep)) then
+                    exception.throw("invalid dependency '" .. oos.type(c) ..  "'");
+                end;
+                f(dep);
+            end
+        end
 
-    load = function()
-        local function instantiate(c)
+        function instantiate(c)
             if not registry[c] then
                 local deps = getDependencies(c);
+                -- resolve component dependencies (args passed to the constructor are ordered)
                 local args = {};
                 for _, dep in ipairs(deps) do
-                    local b = (oos.type.isclass(dep) or oos.type.isobject(dep)) and dep or nil;
-                    if not b and dep then
+                    if not (oos.type.isclass(dep) or oos.type.isobject(dep)) then
                         exception.throw("cannot create component '" .. oos.type(c) ..  "', missing one or more dependencies");
                     end;
-
-                    if b then
-                        table.insert(args,
-                            registry[b]
-                            or
-                            instantiate(b)
-                            or
-                            exception.throw("cannot create component '" .. oos.type(c) ..  "', missing dependency '" .. oos.type(b) .. "'"));
-                    end
+                    table.insert(args, registry[dep] or instantiate(dep)
+                        or exception.throw("cannot create component '" .. oos.type(c) ..  "', missing dependency '" .. oos.type(dep) .. "'"));
                 end
+                -- create component instance
                 registry[c] = c(table.unpack(args));
             end
             return registry[c]
         end
+    end;
 
+    load = function()
+        -- validate dependencies and build dependency list
         local components = ann.getAnnotated(stereotype["@Component"]);
         local depGraph = DependencyGraph();
-        local compDep = {}
+        local depList = {}
         for _,a in pairs(components) do
             local numDep = 0
             for var, dep in pairs(getDependencies(a)) do
@@ -93,11 +97,12 @@ ns.ctx.Loader() {
                     numDep = numDep + 1;
                 end;
             end
-            table.insert(compDep, { c = a, n = numDep });
+            table.insert(depList, { c = a, n = numDep });
         end
 
-        table.sort(compDep, function(a, b) return a.n < b.n; end)
-        for _, v in pairs(compDep) do
+        -- instantiate components
+        table.sort(depList, function(a, b) return a.n < b.n; end)
+        for _, v in pairs(depList) do
             instantiate(v.c);
         end
     end;

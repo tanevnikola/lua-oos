@@ -8,31 +8,35 @@ local luna      = require "lib.luna"
 
 local ns = oos.class;
 
-ann.annotate(
-    luna.stereotype["@Component"] {
-        ns.A
-    }
-)(ns.B() {
-    { print = print };
-    
-    constructor = function(x)
-    end;
-    
-    foo = function()
-    end;
-});
 
 ann.annotate(
     luna.stereotype["@Component"] {
+        ns.B
     }
 )(ns.A() {
     { print = print };
     
-    constructor = function()
-    this.a = 6;
+    constructor = function(a)
+        print(a)
+        a.foo();
     end;
     
     foo = function()
+        print("DSADS");
+    end;
+});
+ann.annotate(
+    luna.stereotype["@Component"] {
+    }
+)(ns.B() {
+    { print = print };
+    
+    constructor = function()
+    this.a=5;
+    end;
+    
+    foo = function()
+        print("DSADS");
     end;
 });
 
