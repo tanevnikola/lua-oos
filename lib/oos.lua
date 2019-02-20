@@ -1,13 +1,9 @@
+local ex = require "lib.ex"
 ----------------------------------------------------------
 -- error
 ----------------------------------------------------------
-local function ft_error(msg, level)
-    error(debug.traceback("\n[Error]\n" .. msg, (level or 0) + 2));
-    os.exit(-1);
-end
-
 local function instantiationError(msg, t)
-    ft_error("Cannot make instance of '" .. t .. "'\n[Reason]\n" .. msg, 1);
+    ex.throw("Cannot make instance of '" .. t .. "'\nReason: " .. msg, 1);
 end
 
 ----------------------------------------------------------
@@ -15,17 +11,11 @@ end
 ----------------------------------------------------------
 local annotationRegistry = setmetatable({}, {__mode = "k"});
 local function annotate(o, md)
-    if not o then
-        ft_error("annotate nil")
-    end
     annotationRegistry[o] = md;
     return o;
 end
 
 local function getAnnotation(o)
-    if not o then
-        ft_error("get annotate nil")
-    end
     return annotationRegistry[o];
 end
 
@@ -214,10 +204,10 @@ local function createInstance(c, ...)
         __metatable = {};
         
         __index = function(self, k)
-            return rawget(self, k) or error("No field named '" .. ft_type(icctx.instance) .. ":" .. k .. "'");
+            return rawget(self, k) or ex.throw("No field named '" .. ft_type(icctx.instance) .. ":" .. k .. "'");
         end;
         __newindex = function(self, k, v)
-            error("Cannot set value for field '" .. ft_type(icctx.instance) .. ":" .. k .. "'");
+            ex.throw("Cannot set value for field '" .. ft_type(icctx.instance) .. ":" .. k .. "'");
         end;
 
         __call = function(self, ...)
@@ -236,7 +226,7 @@ local function defineClass(classpath, base, c)
         _ft_base = base;
         __metatable = {};
         __call = createInstance;
-        __newindex = function() ft_error("Cannot extend classes"); end;
+        __newindex = function() ex.throw("Cannot extend classes"); end;
         __index = function(_, key) return class_mtbl[key]; end
     }
 
@@ -250,7 +240,7 @@ class_functor_mtbl = {
     __metatable = {},
     __call = function(self, base)
         if base and not ft_type.isclass(base) then
-            ft_error("invalid base class provided. Expected 'class <classname>' got '" .. ft_type(base) .. "'", 1);
+            ex.throw("invalid base class provided. Expected '<classname>' got '" .. ft_type(base) .. "'", 1);
         end
 
         return function(classdef)
@@ -303,5 +293,4 @@ return {
     type            = ft_type;
     class           = ft_class;
     reflection      = ft_reflection;
-    error           = ft_error;
 };

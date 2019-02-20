@@ -1,6 +1,7 @@
 local oos       = require "lib.oos"
 local ann       = require "lib.ann"
-local luna      = require "lib.luna.luna"
+local luna      = require "lib.luna"
+local ex        = require "lib.ex"
 
 local ns = oos.class;
 
@@ -36,4 +37,9 @@ ann.annotate(
     end;
 });
 
-luna.ctx.Loader().load();
+local lunaContextLoader = luna.ctx.Loader()
+ex.try(function() 
+    lunaContextLoader.load()
+    ex.throw({a=4})
+end)
+.finally(function() print("DASDSA"); end).continue();
