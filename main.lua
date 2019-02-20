@@ -1,24 +1,28 @@
+local exception = require "lib.ex"
+exception.try(function()
+
 local oos       = require "lib.oos"
 local ann       = require "lib.ann"
 local luna      = require "lib.luna"
-local ex        = require "lib.ex"
 
 local ns = oos.class;
 
 ann.annotate(
-    luna.stereotype["@Component"]{
+    luna.stereotype["@Component"] {
+        ns.A
     }
-)(ns.B(){
-    {print = print};
+)(ns.B() {
+    { print = print };
     
-    constructor = function()
-        print("_B")
+    constructor = function(x)
+        print("B")
     end;
     
-     foo = function()
-        print("foo _B")
+    foo = function()
+        print("there is foo in B")
     end;
 });
+
 
 ann.annotate(
     luna.stereotype["@Component"] {
@@ -37,9 +41,12 @@ ann.annotate(
     end;
 });
 
-local lunaContextLoader = luna.ctx.Loader()
-ex.try(function() 
-    lunaContextLoader.load()
-    ex.throw({a=4})
+print(debug.traceback())
+
+exception.throw("")
+
+luna.ctx.Loader().load()
+
 end)
-.finally(function() print("DASDSA"); end).continue();
+.continue(function(a,b)
+ return debug.traceback(); end);

@@ -1,6 +1,6 @@
 local oos       = require "lib.oos"
 local ann       = require "lib.ann"
-local ex        = require "lib.ex"
+local exception = require "lib.ex"
 
 local ns = oos.class.luna;
 
@@ -34,9 +34,9 @@ local DependencyGraph = ns.__hidden__.DependencyGraph() {
     addEdge = function(a, b)
         local reg = vertexRegistry(a);
         reg[b] =
-            hasPath(b, a) and ex.throw("Circular dependency between '" .. tostring(a) .. "' and '" .. tostring(b) .. "'", 2)
+            hasPath(b, a) and exception.throw("Circular dependency between '" .. tostring(a) .. "' and '" .. tostring(b) .. "'", 2)
             or
-            reg[b] and ex.throw("Edge '" .. tostring(a) .. "' > '" .. tostring(b) .. "' already exists", 2)
+            reg[b] and exception.throw("Edge '" .. tostring(a) .. "' > '" .. tostring(b) .. "' already exists", 2)
             or b
     end;
 }
@@ -62,9 +62,18 @@ ns.ctx.Loader() {
                 local deps = getDependencies(c);
                 local args = {};
                 for _, dep in ipairs(deps) do
-                    local b = oos.type.isclass(dep) and dep or oos.type.isfunction(dep) and dep() or nil;
+                    local b = oos.type.isobject(dep) and dep or nil;
+                    if not b and dep then
+                        exception.throw("Cannot create component '" .. oos.type(c) ..  "', missing one or more dependencies");
+                    end;
+                    
                     if b then
-                        table.insert(args, registry[b] or instantiate(b) or ex.throw("Cannot create component '" .. oos.type(c) ..  "', missing dependency '" .. oos.type(b) .. "'"));
+                        table.insert(args, 
+                            registry[b] 
+                            or 
+                            instantiate(b) 
+                            or 
+                            exception.throw("Cannot create component '" .. oos.type(c) ..  "', missing dependency '" .. oos.type(b) .. "'"));
                     end
                 end
                 registry[c] = c(table.unpack(args));
@@ -78,7 +87,7 @@ ns.ctx.Loader() {
         for _,a in pairs(components) do
             local numDep = 0
             for var, dep in pairs(getDependencies(a)) do
-                local b = oos.type.isclass(dep) and dep or oos.type.isfunction(dep) and dep() or nil;
+                local b = oos.type.isobject(dep) and dep or oos.type.isfunction(dep) and dep() or nil;
                 if b then
                     depGraph.addEdge(oos.type(a), oos.type(b));
                     numDep = numDep + 1;

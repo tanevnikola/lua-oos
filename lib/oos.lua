@@ -1,9 +1,9 @@
-local ex = require "lib.ex"
+local exception = require "lib.ex"
 ----------------------------------------------------------
 -- error
 ----------------------------------------------------------
 local function instantiationError(msg, t)
-    ex.throw("Cannot make instance of '" .. t .. "'\nReason: " .. msg, 1);
+    exception.throw("Cannot make instance of '" .. t .. "'\nReason: " .. msg, 1);
 end
 
 ----------------------------------------------------------
@@ -33,6 +33,7 @@ end
 ----------------------------------------------------------
 -- type
 ----------------------------------------------------------
+
 local ft_type;
 ft_type = setmetatable({
     -- base types validation
@@ -54,10 +55,15 @@ ft_type = setmetatable({
         return ann and (ann.stereotype == ft_reflection.stereotype.CLASS) or false;
     end;
 
+    isobject    = function(x)
+        local ann = getAnnotation(x);
+        return ann and (ann.stereotype == ft_reflection.stereotype.CLASS) or false;
+    end;
+
     issubclass  = function(x, y)
         local ann = getAnnotation(x);
-        local baseX = ann and ann.baseClass
-        return ft_type.issame(x, y) or baseX and ft_type.issubclass(baseX.object, y) or false;
+        local baseX = ann and ann.base
+        return ft_type.issame(x, y) or baseX and ft_type.issubclass(baseX.class, y) or false;
     end;
 
     -- compare types
@@ -67,7 +73,7 @@ ft_type = setmetatable({
 
     getbasetype = function(x)
         local ann = getAnnotation(x);
-        return ann and ann.baseClass and ann.baseClass.name or ft_type(x);
+        return ann and ann.base and ann.base.name or ft_type(x);
     end;
 },
 {
@@ -91,7 +97,10 @@ ft_type = setmetatable({
 -- env    : the environment to extend
 -- c      : class definition
 local function extendEnv(env, c)
-    env = c._ft_base and extendEnv(env, c._ft_base) or env;
+    local cInfo = getAnnotation(c);
+    local baseClass = cInfo and cInfo.base and cInfo.base.class;
+
+    env = baseClass and extendEnv(env, baseClass) or env;
     local mex = c[1];
 
     if ft_type.istable(mex) then
@@ -150,8 +159,10 @@ local function createMethod(f, c, icctx)
             end;
         });
         -- super
-        if c._ft_base then
-            rawset(icctx.env.internal[c], "super", createMethods({}, c._ft_base, icctx));
+        local cInfo = getAnnotation(c);
+        local baseClass = cInfo and cInfo.base and cInfo.base.class;
+        if baseClass then
+            rawset(icctx.env.internal[c], "super", createMethods({}, baseClass, icctx));
         end
     end
 
@@ -174,7 +185,9 @@ createMethods = function(h, c, icctx)
             end
         end
     end
-    return c._ft_base and createMethods(h, c._ft_base, icctx) or h;
+    local cInfo = getAnnotation(c);
+    local baseClass = cInfo and cInfo.base and cInfo.base.class;
+    return baseClass and createMethods(h, baseClass, icctx) or h;
 end
 
 local function createInstance(c, ...)
@@ -192,27 +205,30 @@ local function createInstance(c, ...)
 
     -- invoke constructor
     local function invokeconstructor(c, ...)
-        if c._ft_base then
-            invokeconstructor(c._ft_base, ...)
+        local cInfo = getAnnotation(c);
+        local baseClass = cInfo and cInfo.base and cInfo.base.class;    
+        if baseClass then
+            invokeconstructor(baseClass, ...)
         end
-        local _ = c.constructor and createMethod(c.constructor, c, icctx)(...);
+        local constructor = c.constructor and createMethod(c.constructor, c, icctx);
+        local _ = constructor and constructor(...);
     end
     invokeconstructor(c, ...);
 
     -- protect the instance
     local pInstance = setmetatable(icctx.instance, {
         __metatable = {};
-        
+
         __index = function(self, k)
-            return rawget(self, k) or ex.throw("No field named '" .. ft_type(icctx.instance) .. ":" .. k .. "'");
+            return rawget(self, k) or exception.throw("No field named '" .. ft_type(icctx.instance) .. ":" .. k .. "'");
         end;
         __newindex = function(self, k, v)
-            ex.throw("Cannot set value for field '" .. ft_type(icctx.instance) .. ":" .. k .. "'");
+            exception.throw("Cannot set value for field '" .. ft_type(icctx.instance) .. ":" .. k .. "'");
         end;
 
         __call = function(self, ...)
-            if ft_type.ismethod(self.__call) then 
-                return self.__call(...) 
+            if ft_type.ismethod(self.__call) then
+                return self.__call(...)
             end
         end;
     });
@@ -220,67 +236,61 @@ local function createInstance(c, ...)
     return pInstance;
 end;
 
-local function defineClass(classpath, base, c)
-    local class_mtbl;
-    class_mtbl = {
-        _ft_base = base;
-        __metatable = {};
-        __call = createInstance;
-        __newindex = function() ex.throw("Cannot extend classes"); end;
-        __index = function(_, key) return class_mtbl[key]; end
-    }
-
-    return setmetatable(c, class_mtbl);
-end;
-
 local ft_class = {_ft_ns = "ns", _ft_ns_simple = "ns"};
 
 local class_functor_mtbl
 class_functor_mtbl = {
     __metatable = {},
-    __call = function(self, base)
+    __call = function(self, ...)
+        local info = getAnnotation(self);
+        if info then
+            return info.createInstance(...);
+        end
+        
+        local base = ({...})[1];
         if base and not ft_type.isclass(base) then
-            ex.throw("invalid base class provided. Expected '<classname>' got '" .. ft_type(base) .. "'", 1);
+            exception.throw("invalid base class provided. Expected '<classname>' got '" .. ft_type(base) .. "'", 1);
         end
 
-        return function(classdef)
+        return function(...)
+            local classdef = ({...})[1];
             local methodAnnotations = {}
-            self._ft_classdef = annotate(defineClass(self._ft_ns, base, classdef), {
-                createInstance      = function(...) return self._ft_classdef(...); end;
+
+            annotate(self, {
+                class               = classdef;
+                
+                createInstance      = function(...) return createInstance(classdef, ...); end;
 
                 stereotype          = ft_reflection.stereotype.CLASS;
                 name                = self._ft_ns;
                 simpleName          = self._ft_ns_simple;
-                baseClass           = base and getAnnotation(base) or nil;
+                base                = base and getAnnotation(base) or nil;
                 methods             = methodAnnotations;
             });
+            annotate(classdef, getAnnotation(self));
 
-            for k, v in pairs(self._ft_classdef) do
+            for k, v in pairs(classdef) do
                 if ft_type.isfunction(v) and k ~= "constructor" then
                     annotate(v, {
                         stereotype          = ft_reflection.stereotype.METHOD;
                         name                = self._ft_ns .. "." .. k;
                         simpleName          = k;
-                        class               = getAnnotation(self._ft_classdef);
+                        class               = getAnnotation(self);
                     });
 
                     methodAnnotations[k] = getAnnotation(v);
                 end
             end
-            
-            return self._ft_classdef;
+            return self;
         end;
     end;
 
     __index = function(self, key)
-        self.classRecord = rawget(self, "classRecord") or {};
-
         if string.sub(key, 1, string.len("_ft_")) =="_ft_" then
             return rawget(self, key);
         end;
-        
-        self.classRecord[key] = self.classRecord[key] or setmetatable({_ft_ns = rawget(self, "_ft_ns") .. "." .. key, _ft_ns_simple = key}, class_functor_mtbl);
-        return self.classRecord[key]._ft_classdef or self.classRecord[key];
+        self[key] = setmetatable({_ft_ns = rawget(self, "_ft_ns") .. "." .. key, _ft_ns_simple = key}, class_functor_mtbl);
+        return self[key];
     end;
 };
 

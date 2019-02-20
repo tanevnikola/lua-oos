@@ -1,25 +1,32 @@
 local function throw(e)
-    error(debug.traceback(e, 0));
+    error(e, 7);
 end
 
 local function try(f)
     local tryTable = {}
 
     local catchHandler;
-    local finalizeHandler;
+    local finallyHandler;
 
-    local function stop(rethrow)
+    local function stop(convertHandler)
         local ok, e = pcall(f);
+        
         if not ok and catchHandler then
             catchHandler(e);
         end
-        if finalizeHandler then
-            finalizeHandler();
+        
+        if finallyHandler then
+            finallyHandler();
         end
         
-        if not ok and rethrow then
-            throw(e)
+        if not ok and convertHandler then
+            e = (type(convertHandler) == "function" and convertHandler(e) or e);
+            throw(e);
         end
+    end
+    
+    local function continue(convertHandler)
+        return stop(convertHandler or true)
     end
 
     local finally;
@@ -28,15 +35,15 @@ local function try(f)
         return {
             finally     = finally;
             stop        = stop;
-            continue    = function() return stop(true) end;
+            continue    = continue;
         }
     end;
     
     finally = function(handler)
-        finalizeHandler = handler;
+        finallyHandler = handler;
         return {
             stop        = stop;
-            continue    = function() return stop(true) end;
+            continue    = continue;
         }
     end;
 
@@ -44,6 +51,7 @@ local function try(f)
         stop        = stop;
         catch       = catch;
         finally     = finally;
+        continue    = continue;
     };
 end;
 
