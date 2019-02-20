@@ -22,7 +22,7 @@ local DependencyGraph = ns.__hidden__.DependencyGraph() {
             return registry[x];
         end;
 
-        hasPath = function(a, b)
+        function hasPath (a, b)
             for _,v in pairs(vertexRegistry(a)) do
                 if v == b or hasPath(v, b) then
                     return true;
@@ -31,21 +31,21 @@ local DependencyGraph = ns.__hidden__.DependencyGraph() {
         end;
     end;
 
-    addEdge = function(a, b)
+    validateDependency = function(a, b)
         local reg = vertexRegistry(a);
         reg[b] =
-            hasPath(b, a) and exception.throw("Circular dependency between '" .. tostring(a) .. "' and '" .. tostring(b) .. "'", 2)
+            hasPath(b, a) and exception.throw("circular dependency between '" .. tostring(a) .. "' and '" .. tostring(b) .. "'", 2)
             or
-            reg[b] and exception.throw("Edge '" .. tostring(a) .. "' > '" .. tostring(b) .. "' already exists", 2)
+            reg[b] and exception.throw("edge '" .. tostring(a) .. "' > '" .. tostring(b) .. "' already exists", 2)
             or b
     end;
 }
 
 ns.ctx.Loader() {
     {
-        pairs = pairs,
-        ipairs = ipairs,
-        table = table
+        pairs   = pairs;
+        ipairs  = ipairs;
+        table   = table;
     }; -- mex
 
     constructor = function()
@@ -62,18 +62,18 @@ ns.ctx.Loader() {
                 local deps = getDependencies(c);
                 local args = {};
                 for _, dep in ipairs(deps) do
-                    local b = oos.type.isobject(dep) and dep or nil;
+                    local b = (oos.type.isclass(dep) or oos.type.isobject(dep)) and dep or nil;
                     if not b and dep then
-                        exception.throw("Cannot create component '" .. oos.type(c) ..  "', missing one or more dependencies");
+                        exception.throw("cannot create component '" .. oos.type(c) ..  "', missing one or more dependencies");
                     end;
-                    
+
                     if b then
-                        table.insert(args, 
-                            registry[b] 
-                            or 
-                            instantiate(b) 
-                            or 
-                            exception.throw("Cannot create component '" .. oos.type(c) ..  "', missing dependency '" .. oos.type(b) .. "'"));
+                        table.insert(args,
+                            registry[b]
+                            or
+                            instantiate(b)
+                            or
+                            exception.throw("cannot create component '" .. oos.type(c) ..  "', missing dependency '" .. oos.type(b) .. "'"));
                     end
                 end
                 registry[c] = c(table.unpack(args));
@@ -87,9 +87,9 @@ ns.ctx.Loader() {
         for _,a in pairs(components) do
             local numDep = 0
             for var, dep in pairs(getDependencies(a)) do
-                local b = oos.type.isobject(dep) and dep or oos.type.isfunction(dep) and dep() or nil;
+                local b = (oos.type.isclass(dep) or oos.type.isobject(dep)) and dep or nil;
                 if b then
-                    depGraph.addEdge(oos.type(a), oos.type(b));
+                    depGraph.validateDependency(oos.type(a), oos.type(b));
                     numDep = numDep + 1;
                 end;
             end
@@ -100,8 +100,6 @@ ns.ctx.Loader() {
         for _, v in pairs(compDep) do
             instantiate(v.c);
         end
-
-
     end;
 }
 

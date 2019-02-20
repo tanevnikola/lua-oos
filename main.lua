@@ -1,4 +1,5 @@
 local exception = require "lib.ex"
+
 exception.try(function()
 
 local oos       = require "lib.oos"
@@ -15,38 +16,30 @@ ann.annotate(
     { print = print };
     
     constructor = function(x)
-        print("B")
     end;
     
     foo = function()
-        print("there is foo in B")
     end;
 });
 
-
 ann.annotate(
     luna.stereotype["@Component"] {
-        ns.B
     }
 )(ns.A() {
     { print = print };
     
-    constructor = function(x)
-        x.foo();
-        print("A")
+    constructor = function()
+    this.a = 6;
     end;
     
     foo = function()
-        print("foo A")
     end;
 });
-
-print(debug.traceback())
-
-exception.throw("")
 
 luna.ctx.Loader().load()
 
 end)
-.continue(function(a,b)
- return debug.traceback(); end);
+.continue(function(ex)
+    return (ex.error or ex) .. (ex.traceback and ("\n" .. ex.traceback) or "");
+end);
+

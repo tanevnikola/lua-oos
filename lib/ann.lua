@@ -5,7 +5,7 @@ local ns = oos.class.ann;
 local registry = setmetatable({}, {__mode = "k"});
 
 ns.Annotation() {
-    { print = print; tostring = tostring };
+    { };
 
     constructor = function(md)
         annotate = function(o)

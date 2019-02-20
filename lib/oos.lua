@@ -106,10 +106,10 @@ local function extendEnv(env, c)
     if ft_type.istable(mex) then
         for k, v in pairs(mex) do
             if env[k] then
-                instantiationError("Duplicate field '" .. k ..  "' found in MEX", ft_type(c));
+                instantiationError("duplicate field '" .. k ..  "' found in MEX", ft_type(c));
             end
             if not (ft_type.isfunction(v) or ft_type.istablelike(v) or ft_type.isfunction(v)) then
-                instantiationError("Invalid type '" .. ft_type(v) .. "' found in MEX", ft_type(c));
+                instantiationError("invalid type '" .. ft_type(v) .. "' found in MEX", ft_type(c));
             end
             env[k] = v;
         end
@@ -131,7 +131,7 @@ local function loadMethodFunction(f, c, icctx)
         if up == "_ENV" then
             debug.setupvalue(method, i, env);
         elseif env[up] then
-            instantiationError("Ambiguous field '" .. up .. "' found in MEX, there is an upvalue with the same name", ft_type(c));
+            instantiationError("ambiguous field '" .. up .. "' found in MEX, there is an upvalue with the same name", ft_type(c));
         else
             debug.upvaluejoin(method, i, f, i);
         end
@@ -181,7 +181,7 @@ createMethods = function(h, c, icctx)
             elseif ft_type.isfunction(v) then
                 h[k] = v;
             elseif not ft_type.isfunction(v) and not (ft_type.istable(v) and k == 1) then
-                instantiationError("Invalid field '" .. k .. "' (of type '" .. ft_type(v) .. "') found in class definition", ft_type(c));
+                instantiationError("invalid field '" .. k .. "' (of type '" .. ft_type(v) .. "') found in class definition", ft_type(c));
             end
         end
     end
@@ -220,16 +220,20 @@ local function createInstance(c, ...)
         __metatable = {};
 
         __index = function(self, k)
-            return rawget(self, k) or exception.throw("No field named '" .. ft_type(icctx.instance) .. ":" .. k .. "'");
+            return 
+                rawget(self, k)
+                or 
+                exception.throw("no field named '" .. ft_type(icctx.instance) .. ":" .. k .. "'");
         end;
         __newindex = function(self, k, v)
-            exception.throw("Cannot set value for field '" .. ft_type(icctx.instance) .. ":" .. k .. "'");
+            exception.throw("cannot set value for field '" .. ft_type(icctx.instance) .. ":" .. k .. "'");
         end;
 
         __call = function(self, ...)
             if ft_type.ismethod(self.__call) then
                 return self.__call(...)
             end
+            exception.throw("attempt to call '" .. ft_type(icctx.instance) .. "' value");
         end;
     });
 

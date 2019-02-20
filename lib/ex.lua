@@ -1,5 +1,5 @@
 local function throw(e)
-    error(e, 7);
+    error({error = e; traceback = debug.traceback(nil, 2)});
 end
 
 local function try(f)
@@ -20,8 +20,7 @@ local function try(f)
         end
         
         if not ok and convertHandler then
-            e = (type(convertHandler) == "function" and convertHandler(e) or e);
-            throw(e);
+            error((type(convertHandler) == "function" and convertHandler(e) or e));
         end
     end
     

@@ -1,6 +1,6 @@
 local function assertErrorMessage(msg, f)
     local status, result = pcall(f);
-    return not status and string.match(result, msg) and (print(result) or true) or error("\n\nnot found: '" .. msg .. "' in: " .. (result or "<NO ERROR FOUND>"))
+    return not status and string.match(result.error, msg) and (print(result.error) or true) or error("\n\nnot found: '" .. msg .. "' in: " .. (result.error or "<NO ERROR FOUND>"))
 end
 
 local function inScope(f)
@@ -31,9 +31,9 @@ local function testInvalidTypeInMex()
         end)
     end
 
-    assertErrorMessage("Invalid type 'boolean' found in MEX", buildTest(true));
-    assertErrorMessage("Invalid type 'string' found in MEX", buildTest(""));
-    assertErrorMessage("Invalid type 'number' found in MEX", buildTest(1));
+    assertErrorMessage("invalid type 'boolean' found in MEX", buildTest(true));
+    assertErrorMessage("invalid type 'string' found in MEX", buildTest(""));
+    assertErrorMessage("invalid type 'number' found in MEX", buildTest(1));
 end
 testInvalidTypeInMex();
 
@@ -49,7 +49,7 @@ local function testAmbiguousFieldInMEX()
         end)
     end
 
-    assertErrorMessage("Ambiguous field 'x' found in MEX, there is an upvalue with the same name", buildTest());
+    assertErrorMessage("ambiguous field 'x' found in MEX, there is an upvalue with the same name", buildTest());
 end
 testAmbiguousFieldInMEX();
 
@@ -64,7 +64,7 @@ local function testInvalidFieldInClassDefinition()
         end)
     end
 
-    assertErrorMessage("Invalid field 'invalid' %(of type 'boolean'%) found in class definition", buildTest());
+    assertErrorMessage("invalid field 'invalid' %(of type 'boolean'%) found in class definition", buildTest());
 end
 testInvalidFieldInClassDefinition();
 
