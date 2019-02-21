@@ -50,31 +50,28 @@ ns.ctx.Loader() {
 
     constructor = function()
         registry = {};
+        depGraph = DependencyGraph();
 
         function getDependencies(c)
             return ann.getMetadata(c, stereotype["@Component"]);
         end
         
-        function forEachDependency(f)
-            for _, dep in ipairs(ann.getMetadata(c, stereotype["@Component"])) do
-                if not (oos.type.isclass(dep) or oos.type.isobject(dep)) then
-                    exception.throw("invalid dependency '" .. oos.type(c) ..  "'");
-                end;
-                f(dep);
-            end
+        function isValidComponentDependency(x)
+            return oos.type.isclass(x);
         end
 
         function instantiate(c)
             if not registry[c] then
-                local deps = getDependencies(c);
                 -- resolve component dependencies (args passed to the constructor are ordered)
                 local args = {};
-                for _, dep in ipairs(deps) do
-                    if not (oos.type.isclass(dep) or oos.type.isobject(dep)) then
-                        exception.throw("cannot create component '" .. oos.type(c) ..  "', missing one or more dependencies");
+                for _, dep in ipairs(getDependencies(c)) do
+                    if not isValidComponentDependency(dep) then
+                        exception.throw("cannot create component '" .. oos.type(c) ..  "', invalid dependency '" .. oos.type(dep) .. "'");
                     end;
                     table.insert(args, registry[dep] or instantiate(dep)
                         or exception.throw("cannot create component '" .. oos.type(c) ..  "', missing dependency '" .. oos.type(dep) .. "'"));
+
+                    depGraph.validateDependency(oos.type(c), oos.type(dep));
                 end
                 -- create component instance
                 registry[c] = c(table.unpack(args));
@@ -86,24 +83,21 @@ ns.ctx.Loader() {
     load = function()
         -- validate dependencies and build dependency list
         local components = ann.getAnnotated(stereotype["@Component"]);
-        local depGraph = DependencyGraph();
-        local depList = {}
-        for _,a in pairs(components) do
-            local numDep = 0
-            for var, dep in pairs(getDependencies(a)) do
-                local b = (oos.type.isclass(dep) or oos.type.isobject(dep)) and dep or nil;
-                if b then
-                    depGraph.validateDependency(oos.type(a), oos.type(b));
-                    numDep = numDep + 1;
-                end;
-            end
-            table.insert(depList, { c = a, n = numDep });
+        for _, c in pairs(components) do
+            instantiate(c);
         end
+        
+        for _, c in pairs(registry) do
+            local cInfo = oos.reflection.getInfo(c);
+            if cInfo.methods.init then
+                local args = {}
+                for _, dep in ipairs(getDependencies(c)) do
+                    table.insert(args, registry[dep] 
+                        or exception.throw("cannot initialize component '" .. oos.type(c) ..  "', missing dependency '" .. oos.type(dep) .. "'"));
 
-        -- instantiate components
-        table.sort(depList, function(a, b) return a.n < b.n; end)
-        for _, v in pairs(depList) do
-            instantiate(v.c);
+                    c.init(table.unpack(args))
+                end
+            end
         end
     end;
 }

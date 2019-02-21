@@ -20,13 +20,20 @@ ns.Annotation() {
     end
 }
 
-local function getMetadata(o, ann)
-    ann = oos.type(ann);
-    return registry[o] and registry[o][ann] or {};
+local function getMetadata(o, a)
+    return registry[o] and registry[o][a] or {};
 end
 
 local function getAnnotations(o)
     return registry[o] or {};
+end
+
+local function getAnnotated(a)
+    local result = {}
+    for k,v in pairs(registry) do
+        table.insert(result, v[a] and k or nil)
+    end
+    return result;
 end
 
 local function annotate(...)
@@ -39,13 +46,7 @@ local function annotate(...)
     end
 end
 
-local function getAnnotated(annotation)
-    local result = {}
-    for k,v in pairs(registry) do
-        table.insert(result, v[oos.type(annotation)] and k or nil)
-    end
-    return result;
-end
+
 
 return {
     annotate            = annotate;
